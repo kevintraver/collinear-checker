@@ -24,7 +24,26 @@ def are_collinear(coord1, coord2, coord3, tolerance=0.3):
     d1 = cross_track_distance(coord1, coord2, coord3)
     d2 = cross_track_distance(coord2, coord1, coord3)
     d3 = cross_track_distance(coord3, coord1, coord2)
-    return max(d1, d2, d3) <= tolerance, max(d1, d2, d3) * 1000  # Convert km to meters
+    
+    # Calculate geodesic distances between points
+    geodesic_distance_1_2 = geodesic(coord1, coord2).kilometers
+    geodesic_distance_2_3 = geodesic(coord2, coord3).kilometers
+    geodesic_distance_1_3 = geodesic(coord1, coord3).kilometers
+    
+    # Calculate the cumulative distance for each point to the other two
+    cumulative_distance_1 = geodesic_distance_1_2 + geodesic_distance_1_3
+    cumulative_distance_2 = geodesic_distance_1_2 + geodesic_distance_2_3
+    cumulative_distance_3 = geodesic_distance_1_3 + geodesic_distance_2_3
+    
+    # Determine which point is the middle one based on cumulative distances
+    if cumulative_distance_1 < cumulative_distance_2 and cumulative_distance_1 < cumulative_distance_3:
+        middle_point = "coord1"
+    elif cumulative_distance_2 < cumulative_distance_1 and cumulative_distance_2 < cumulative_distance_3:
+        middle_point = "coord2"
+    else:
+        middle_point = "coord3"
+    
+    return max(d1, d2, d3) <= tolerance, max(d1, d2, d3) * 1000, middle_point  # Convert km to meters
 
 # Connect to SQLite database
 conn = sqlite3.connect('landmarks.db')
@@ -37,6 +56,7 @@ CREATE TABLE IF NOT EXISTS collinear_landmarks (
     landmark1_id INTEGER,
     landmark2_id INTEGER,
     landmark3_id INTEGER,
+    middle_landmark_id INTEGER,
     offset REAL
 )
 ''')
@@ -62,10 +82,19 @@ if category_id:
         id1, name1, coord1 = landmark1[0], landmark1[1], (landmark1[2], landmark1[3])
         id2, name2, coord2 = landmark2[0], landmark2[1], (landmark2[2], landmark2[3])
         id3, name3, coord3 = landmark3[0], landmark3[1], (landmark3[2], landmark3[3])
-        collinear, offset = are_collinear(coord1, coord2, coord3)
+        collinear, offset, middle_point = are_collinear(coord1, coord2, coord3)
+        
+        if middle_point == "coord1":
+            middle_id, middle_name = id1, name1
+        elif middle_point == "coord2":
+            middle_id, middle_name = id2, name2
+        else:
+            middle_id, middle_name = id3, name3
+        
         if collinear:
-            cursor.execute("INSERT INTO collinear_landmarks (landmark1_id, landmark2_id, landmark3_id, offset) VALUES (?, ?, ?, ?)", (id1, id2, id3, offset))
-            print(f"The landmarks {name1}, {name2}, and {name3} are collinear with an offset of {offset:.2f} meters.")
+            cursor.execute("INSERT INTO collinear_landmarks (landmark1_id, landmark2_id, landmark3_id, offset, middle_landmark_id) VALUES (?, ?, ?, ?, ?)", 
+                           (id1, id2, id3, offset, middle_id))
+            print(f"The landmarks {name1}, {name2}, and {name3} are collinear. The middle landmark is the {middle_name}, which has an offset of {offset:.2f} meters.")
 else:
     print(f"No landmarks found for category: {category_name}")
 
