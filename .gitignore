@@ -1,3 +1,4 @@
 /landmarks.db
 *.kml
 *.json
+*.csv
